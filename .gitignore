@@ -4,3 +4,5 @@ sardine.iml
 /.classpath
 /.project
 /.settings/
+target
+.github
