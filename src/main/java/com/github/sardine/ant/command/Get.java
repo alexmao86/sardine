@@ -187,6 +187,7 @@ public class Get extends Command {
             urls.poll();
         }
         log("downloaded files to " + localDirectory, Project.MSG_DEBUG);
+        threadPoolExecutor.awaitTermination();
         threadPoolExecutor.shutdown();
         if(db!=null){
             db.commit();
