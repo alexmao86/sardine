@@ -146,7 +146,9 @@ public class Get extends Command {
                 DevResourceEntry entry = toEntry(davResource);
                 log(entry.toString(), Project.MSG_DEBUG);
                 urls.offer(entry);
-                queueSize.incrementAndGet();
+                if(!davResource.isDirectory()){
+                    queueSize.incrementAndGet();
+                }
             }
         }
         long lastReportMillisenconds=System.currentTimeMillis();
@@ -171,7 +173,9 @@ public class Get extends Command {
                         DevResourceEntry subEntry = toEntry(davResource);
                         log(subEntry.toString(), Project.MSG_DEBUG);
                         urls.offer(subEntry);
-                        queueSize.incrementAndGet();
+                        if(!davResource.isDirectory()){
+                            queueSize.incrementAndGet();
+                        }
                     }
                 } catch (IOException e) {
                     log(e.getMessage(), Project.MSG_ERR);
