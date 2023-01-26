@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<project name="sardineTask" basedir=".">
+
+    <target name="init">
+        <typedef resource="com/github/sardine/ant/sardinetask.xml">
+            <classpath>
+                <fileset dir="./target">
+                    <include name="sardine-*.jar"/>
+                </fileset>
+                <fileset dir="./target/lib">
+                    <include name="*.jar"/>
+                </fileset>
+            </classpath>
+        </typedef>
+    </target>
+
+    <target name="delete" depends="init">
+        <sardine username="" password="" port="">
+            <delete url="" />
+        </sardine>
+    </target>
+
+    <target name="move" depends="init">
+        <sardine username="" password="">
+            <move srcUrl="" dstUrl="" />
+        </sardine>
+    </target>
+
+    <target name="copy" depends="init">
+        <sardine username="" password="">
+            <copy srcUrl="" dstUrl="" />
+        </sardine>
+    </target>
+
+    <target name="createDirectory" depends="init">
+        <sardine username="" password="">
+            <createDirectory url="" />
+        </sardine>
+    </target>
+
+    <target name="exists" depends="init">
+        <sardine username="" password="">
+            <exists url="" property="sardine" />
+        </sardine>
+    </target>
+
+    <target name="put1" depends="init">
+        <sardine username="jon" password="stevens">
+            <put url="http://www.foo.com/">
+                <fileset dir="${somedir}">
+                    <include name="*" />
+                </fileset>
+            </put>
+        </sardine>
+    </target>
+
+    <target name="put2" depends="init">
+        <sardine username="jon" password="stevens">
+            <put url="http://www.foo.com/" file="/tmp/foo.txt" contentType="text/plain" />
+        </sardine>
+    </target>
+
+    <target name="get" depends="init">
+        <mkdir dir="./target/test"/>
+        <sardine username="" password="">
+            <get serverUrl="http://localhost:8888" remoteDirectory="/" localDirectory="./target/test" resumeBroken="true" skipExistingFiles="true"/>
+        </sardine>
+    </target>
+</project>
