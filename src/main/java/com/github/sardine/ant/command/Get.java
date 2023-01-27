@@ -21,7 +21,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A nice ant wrapper around sardine.list() and sardine.get().
@@ -69,7 +68,6 @@ public class Get extends Command {
 
     private ThreadPoolExecutor threadPoolExecutor;
 
-    private AtomicInteger queueSize = new AtomicInteger(0);
     /**
      * {@inheritDoc}
      */
@@ -136,7 +134,6 @@ public class Get extends Command {
                 return thread;
             }
         });
-        queueSize.set(0);
         if((!resumeBroken)||urls.isEmpty()){
             URI remoteDirectoryUrl = new URI(serverUrl + '/').resolve(remoteDirectory);
             List<DavResource> resource = getSardine().list(remoteDirectoryUrl.toString(), 1);
@@ -145,19 +142,11 @@ public class Get extends Command {
                 DevResourceEntry entry = toEntry(davResource);
                 log(entry.toString(), Project.MSG_DEBUG);
                 urls.offer(entry);
-                if(!davResource.isDirectory()){
-                    queueSize.incrementAndGet();
-                }
             }
         }
         long lastReportMillisenconds=System.currentTimeMillis();
         while (!urls.isEmpty()) {
             long current = System.currentTimeMillis();
-            //report process each 4 sec
-            if(current-lastReportMillisenconds>4000){
-                log(MessageFormat.format("status: queued download {0}. completed download {1}", queueSize.get(), threadPoolExecutor.getCompletedTaskCount()));
-                lastReportMillisenconds = current;
-            }
             final DevResourceEntry entry = urls.poll();
             if (entry.isDirectory) {
                 //list it
@@ -176,9 +165,6 @@ public class Get extends Command {
                         DevResourceEntry subEntry = toEntry(davResource);
                         log(subEntry.toString(), Project.MSG_DEBUG);
                         urls.offer(subEntry);
-                        if(!davResource.isDirectory()){
-                            queueSize.incrementAndGet();
-                        }
                     }
                 } catch (IOException e) {
                     log("list again.", Project.MSG_ERR);
@@ -187,6 +173,12 @@ public class Get extends Command {
                 }
             } else {
 				download(urls, entry);
+            }
+
+            //report process each 4 sec
+            if(current-lastReportMillisenconds>4000){
+                log(MessageFormat.format("status report: completed download {0}", threadPoolExecutor.getCompletedTaskCount()));
+                lastReportMillisenconds = current;
             }
         }
         int confirmRound = 0;
@@ -200,6 +192,12 @@ public class Get extends Command {
             if(confirmRound>4){
                 log("waited "+confirmRound+" times, still empty, be sure task done");
                 break;
+            }
+            long current = System.currentTimeMillis();
+            //report process each 4 sec
+            if(current-lastReportMillisenconds>4000){
+                log(MessageFormat.format("status report: completed download {0}", threadPoolExecutor.getCompletedTaskCount()));
+                lastReportMillisenconds = current;
             }
         }
         threadPoolExecutor.shutdown();
@@ -246,7 +244,6 @@ public class Get extends Command {
 					Files.copy(ioStream, localFilePath);
 				}
                 log("downloaded "+fileEntry.path+" to "+localFilePath);
-                queueSize.decrementAndGet();
 			} catch (FileAlreadyExistsException e){
                 log("file already exists, skipped, "+e.getMessage());
             }catch (Exception e) {
