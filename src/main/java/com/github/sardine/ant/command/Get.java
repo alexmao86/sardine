@@ -12,10 +12,7 @@ import org.mapdb.Serializer;
 import java.io.*;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.*;
 import java.text.MessageFormat;
 import java.util.LinkedList;
 import java.util.List;
@@ -124,8 +121,10 @@ public class Get extends Command {
             try {
                 urls = db.getQueue(queueName);
             } catch (Exception e) {
-                urls = db.createQueue(queueName, new DevResourceEntrySerializer(), true);
+                urls = db.createQueue(queueName, new DevResourceEntrySerializer(), false);
+                log("created new cache", Project.MSG_DEBUG);
             }
+            log("recovery from local database.");
         }
 
         threadPoolExecutor = new ThreadPoolExecutor(threadCount, threadCount, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue(), new ThreadFactory() {
@@ -156,10 +155,10 @@ public class Get extends Command {
             long current = System.currentTimeMillis();
             //report process each 4 sec
             if(current-lastReportMillisenconds>4000){
-                log(MessageFormat.format("\rstatus: queued download {0}. completed download {1}", queueSize.get(), threadPoolExecutor.getCompletedTaskCount()));
+                log(MessageFormat.format("status: queued download {0}. completed download {1}", queueSize.get(), threadPoolExecutor.getCompletedTaskCount()));
                 lastReportMillisenconds = current;
             }
-            final DevResourceEntry entry = urls.peek();
+            final DevResourceEntry entry = urls.poll();
             if (entry.isDirectory) {
                 //list it
                 log("will going to list " + entry.uri, Project.MSG_DEBUG);
@@ -170,6 +169,10 @@ public class Get extends Command {
                     }
                     List<DavResource> subResource = getSardine().list(entry.uri, 1);
                     for (DavResource davResource : subResource) {
+                        if(davResource.getPath().equals(entry.path)){
+                            log("excluded parent itself "+entry.path, Project.MSG_DEBUG);
+                            continue;
+                        }
                         DevResourceEntry subEntry = toEntry(davResource);
                         log(subEntry.toString(), Project.MSG_DEBUG);
                         urls.offer(subEntry);
@@ -178,21 +181,33 @@ public class Get extends Command {
                         }
                     }
                 } catch (IOException e) {
-                    log(e.getMessage(), Project.MSG_ERR);
+                    log("list again.", Project.MSG_ERR);
+                    urls.offer(entry);//put to last to try again
                     e.printStackTrace();
                 }
             } else {
 				download(urls, entry);
             }
-            urls.poll();
         }
-        log("downloaded files to " + localDirectory, Project.MSG_DEBUG);
-        threadPoolExecutor.awaitTermination();
+        int confirmRound = 0;
+        while (true){
+            Thread.sleep(2000);
+            int size=threadPoolExecutor.getQueue().size();
+            if(size==0){
+                confirmRound++;
+                log("the working queue is empty, looks like task done");
+            }
+            if(confirmRound>4){
+                log("waited "+confirmRound+" times, still empty, be sure task done");
+                break;
+            }
+        }
         threadPoolExecutor.shutdown();
         if(db!=null){
             db.commit();
             db.close();
         }
+        log("downloaded files to " + localDirectory);
     }
 
     private void download(final Queue<DevResourceEntry> urls, final DevResourceEntry fileEntry) throws IOException {
@@ -204,7 +219,7 @@ public class Get extends Command {
                 log("skipping download of already existing file " + localFilePath, Project.MSG_DEBUG);
                 return;
             }
-            log("file length not same, broken file, will download "+fileEntry.path+" again.", Project.MSG_DEBUG);
+            log("file length not same, broken file, will download "+fileEntry.path+" again.");
             Files.delete(localFilePath);
         }
 
@@ -230,12 +245,15 @@ public class Get extends Command {
 				} else {
 					Files.copy(ioStream, localFilePath);
 				}
+                log("downloaded "+fileEntry.path+" to "+localFilePath);
                 queueSize.decrementAndGet();
-			} catch (Exception e) {
+			} catch (FileAlreadyExistsException e){
+                log("file already exists, skipped, "+e.getMessage());
+            }catch (Exception e) {
 				log("download error: "+e.getMessage(), Project.MSG_ERR);
-				e.printStackTrace();
 				log("download "+fileEntry.path+" failed offer to queue again");
 				urls.offer(fileEntry);
+                e.printStackTrace();
 			} finally {
 				if(ioStream!=null){
 					try {
